@@ -56,12 +56,15 @@ def download_files():
             print(f"Error downloading {file['url']}: {e}")
 
 # Create ZIP file from downloaded files
-def create_zip():
+def create_zip(file_data):
     zip_filename = "crawled_files.zip"
     with ZipFile(zip_filename, 'w') as zipf:
         for file in file_data:
-            zipf.write(file['filename'], os.path.basename(file['filename']))
-            os.remove(file['filename'])  # Remove the downloaded file after zipping
+            if os.path.exists(file['filename']):
+                zipf.write(file['filename'], os.path.basename(file['filename']))
+                os.remove(file['filename'])  # Remove the downloaded file after zipping
+            else:
+                print(f"Warning: File not found, skipping: {file['filename']}")
     print(f"ZIP file created: {zip_filename}")
 
 # Main function
