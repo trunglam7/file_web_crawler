@@ -1,13 +1,16 @@
 import os
 import requests
 import mimetypes
+import filetype
 from bs4 import BeautifulSoup
 from zipfile import ZipFile
 from urllib.parse import urljoin, urlparse
 import time
+import argparse
 
 # Constants
-DELAY = 4  # Delay between requests (in seconds)
+DELAY = 1  # Delay between requests (in seconds)
+RESULT_DIR = "result"  # Directory for storing downloaded files
 
 visited_urls = set()
 file_data = []
@@ -46,28 +49,38 @@ def crawl(url, base_url):
 # Download function for files
 def download_files():
     """Downloads files and ensures correct extensions."""
+    # Create the result directory if it doesn't exist
+    if not os.path.exists(RESULT_DIR):
+        os.makedirs(RESULT_DIR)
+
     for file in file_data:
         try:
             response = requests.get(file['url'])
             response.raise_for_status()
 
-            # Determine the correct file extension
-            content_type = response.headers.get('Content-Type', '')
-            extension = mimetypes.guess_extension(content_type) or ''
+            # Try to determine the correct file extension using filetype first
+            kind = filetype.guess(response.content)
+            if kind:
+                extension = kind.extension
+            else:
+                # If filetype.guess fails, fallback to mimetypes
+                content_type = response.headers.get('Content-Type', '')
+                extension = mimetypes.guess_extension(content_type) or ''
 
             # Append extension only if it's missing
             filename = file['filename']
             if extension and not filename.endswith(extension):
                 filename += extension
 
-            # Save the file
-            with open(filename, 'wb') as f:
+            # Save the file in the result directory
+            file_path = os.path.join(RESULT_DIR, filename)
+            with open(file_path, 'wb') as f:
                 f.write(response.content)
 
             print(f"Downloaded: {filename}")
 
-            # Update filename in file_data
-            file['filename'] = filename
+            # Update filename in file_data with the full path
+            file['filename'] = file_path
 
         except Exception as e:
             print(f"Error downloading {file['url']}: {e}")
@@ -86,8 +99,7 @@ def create_zip():
     print(f"ZIP file created: {zip_filename}")
 
 # Main function
-def main(url):
-    base_url = urlparse(url).scheme + "://" + urlparse(url).hostname
+def main(url, base_url):
     print(f"Starting crawl on {url}")
 
     crawl(url, base_url)
@@ -99,5 +111,10 @@ def main(url):
         print("No files found during crawling.")
 
 if __name__ == "__main__":
-    user_url = input("Enter the URL to crawl: ")
-    main(user_url)
+    parser = argparse.ArgumentParser(description="Crawl a website and download its files.")
+    parser.add_argument('-u', '--url', type=str, required=True, help="The URL to crawl.")
+    parser.add_argument('-b', '--base_url', type=str, help="The base URL to use for relative links (defaults to the URL's scheme + hostname).")
+    args = parser.parse_args()
+
+    base_url = args.base_url or urlparse(args.url).scheme + "://" + urlparse(args.url).hostname
+    main(args.url, base_url)
